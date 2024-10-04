@@ -1,0 +1,61 @@
+def excise_exons_introns_to_fasta(exon_positions, target_seq):
+    """Excise exons and introns from the genomic data and write them to exon#.fasta and intron#.fasta files.
+       Outputs in standard FASTA format (60 nucleotides per line) with sequence range in the header."""
+    
+    def format_sequence(sequence):
+        """Format the sequence to 60 characters per line."""
+        return '\n'.join(sequence[i:i+60] for i in range(0, len(sequence), 60))
+
+    # Write exons
+    for idx, (exon_name, start, end, orientation) in enumerate(exon_positions):
+        exon_seq = target_seq[start - 1:end]  # Adjust for 0-based indexing
+        
+        if orientation == '+':
+            exon_header = f">exon{idx + 1} {start}-{end} {orientation}"  # Include range in the header
+            formatted_exon_seq = format_sequence(exon_seq)
+
+            with open(f"exon{idx + 1}_sense.fasta", "w") as exon_file:
+                exon_file.write(f"{exon_header}\n{formatted_exon_seq}\n")
+            print(f"Exon {idx + 1} written: start={start}, end={end}")
+        
+        elif orientation == '-':
+            # Reverse complement the exon sequence for antisense strand
+            reverse_complement_seq = Seq(exon_seq).reverse_complement()
+            antisense_header = f">exon{idx + 1}_antisense {start}-{end} {orientation}"
+            formatted_antisense_seq = format_sequence(str(reverse_complement_seq))
+
+            with open(f"exon{idx + 1}_antisense.fasta", "w") as exon_file:
+                exon_file.write(f"{antisense_header}\n{formatted_antisense_seq}\n")
+            print(f"Reverse complement exon {idx + 1} written.")
+
+    # Write introns
+    for idx in range(1, len(exon_positions)):
+        exon_list = [(start, end, orientation) for _, start, end, orientation in exon_positions]
+
+        if exon_list[idx][2] == '-':  # Handle antisense strand (reverse intron order)
+            intron_start = exon_list[idx][1] + 1  # End of current exon + 1
+            intron_end = exon_list[idx-1][0] - 1  # Start of previous exon - 1
+            intron_seq = target_seq[intron_start - 1:intron_end]  # Adjust for 0-based indexing
+            reverse_complement_intron = Seq(intron_seq).reverse_complement()  # Reverse complement the intron
+
+            intron_header = f">intron{idx}_antisense {intron_start}-{intron_end}"
+            formatted_intron_seq = format_sequence(str(reverse_complement_intron))
+
+            with open(f"intron{idx}_antisense.fasta", "w") as intron_file:
+                intron_file.write(f"{intron_header}\n{formatted_intron_seq}\n")
+            print(f"Reverse complement intron {idx} written: start={intron_start}, end={intron_end}")
+
+        else:  # Handle sense strand
+            intron_start = exon_list[idx-1][1] + 1  # End of previous exon + 1
+            intron_end = exon_list[idx][0] - 1  # Start of next exon - 1
+
+            if intron_start < intron_end:
+                intron_seq = target_seq[intron_start - 1:intron_end]  # Adjust for 0-based indexing
+                intron_header = f">intron{idx}_sense {intron_start}-{intron_end}"
+                formatted_intron_seq = format_sequence(intron_seq)
+
+                with open(f"intron{idx}_sense.fasta", "w") as intron_file:
+                    intron_file.write(f"{intron_header}\n{formatted_intron_seq}\n")
+                print(f"Intron {idx} written: start={intron_start}, end={intron_end}")
+            else:
+                print(f"Warning: intron_start ({intron_start}) > intron_end ({intron_end}) for intron {idx}")
